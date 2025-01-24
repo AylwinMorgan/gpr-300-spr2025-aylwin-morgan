@@ -41,7 +41,7 @@ int main() {
 	GLFWwindow* window = initWindow("Assignment 0", screenWidth, screenHeight);
 	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
 
-	GLuint brickTexture = ew::loadTexture("assets/brick_color.jpg");
+	GLuint brickTexture = ew::loadTexture("assets/metal_color.jpg");
 
 	camera.position = glm::vec3(0.0f, 0.0f, 5.0f);
 	camera.target = glm::vec3(0.0f, 0.0f, 0.0f); // point camera at the center of the scene
