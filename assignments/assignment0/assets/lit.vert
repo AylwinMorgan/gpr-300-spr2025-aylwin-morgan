@@ -3,7 +3,8 @@
 
 layout(location = 0) in vec3 vPos; // Vertex position in model space
 layout(location = 1) in vec3 vNormal; // Vertex normal in model space
-layout(location = 2) in vec2 vTexCoord; // vertex texture coordinate (UV)
+layout(location = 2) in vec3 vTangents;
+layout(location = 3) in vec2 vTexCoord; // vertex texture coordinate (UV)
 
 uniform mat4 _Model; // Model->World Matrix
 uniform mat4 _ViewProjection; // Combined View-> Projection matrix
@@ -15,9 +16,16 @@ out Surface{
 	vec3 WorldPos; // vertex position in world space
 	vec3 WorldNormal; // vertex normal in world space
 	vec2 TexCoord;
+	mat3 TBN;
 }vs_out;
 
 void main(){
+	vec3 T = normalize(vec3(_Model * vec4(vTangents, 0.0)));
+	vec3 N = normalize(vec3(_Model * vec4(vNormal, 0.0)));
+	vec3 B = cross(N,T);
+	mat3 TBN = mat3(T,B,N);
+	vs_out.TBN = transpose(mat3(T,B,N));
+
 	// transform vertex position to world space
 	vs_out.WorldPos = vec3(_Model * vec4(vPos,1.0));
 	// transform vertex normal to world space using normal matrix

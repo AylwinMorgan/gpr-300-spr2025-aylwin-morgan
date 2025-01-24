@@ -49,7 +49,7 @@ int main() {
 	camera.fov = 60.0f; // vertical field of view in degrees
 
 	ew::Shader shader = ew::Shader("assets/lit.vert", "assets/lit.frag");
-	ew::Model monkeyModel = ew::Model("assets/suzanne.obj");
+	ew::Model monkeyModel = ew::Model("assets/suzanne.fbx");
 
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK); // Back face culling
