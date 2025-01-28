@@ -41,7 +41,7 @@ int main() {
 	GLFWwindow* window = initWindow("Assignment 0", screenWidth, screenHeight);
 	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
 
-	GLuint brickTexture = ew::loadTexture("assets/metal_color.jpg");
+	GLuint brickTexture = ew::loadTexture("assets/brick_color.jpg");
 
 	camera.position = glm::vec3(0.0f, 0.0f, 5.0f);
 	camera.target = glm::vec3(0.0f, 0.0f, 0.0f); // point camera at the center of the scene
@@ -49,7 +49,7 @@ int main() {
 	camera.fov = 60.0f; // vertical field of view in degrees
 
 	ew::Shader shader = ew::Shader("assets/lit.vert", "assets/lit.frag");
-	ew::Model monkeyModel = ew::Model("assets/suzanne.fbx");
+	ew::Model monkeyModel = ew::Model("assets/suzanne.obj");
 
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK); // Back face culling
@@ -63,22 +63,22 @@ int main() {
 		prevFrameTime = time;
 
 		//RENDER
-		glClearColor(0.6f,0.8f,0.92f,1.0f);
+		glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		cameraController.move(window, &camera, deltaTime);
 
 		//Rotation of model around y axis
-		monkeyTransform.rotation = glm::rotate(monkeyTransform.rotation,deltaTime,glm::vec3(0.0f,1.0f,0.0f));
+		monkeyTransform.rotation = glm::rotate(monkeyTransform.rotation, deltaTime, glm::vec3(0.0f, 1.0f, 0.0f));
 
-		glBindTextureUnit(0,brickTexture);
+		glBindTextureUnit(0, brickTexture);
 
 		shader.use();
-		shader.setInt("_MainTex",0);
-		shader.setVec3("_EyePos",camera.position);
+		shader.setInt("_MainTex", 0);
+		shader.setVec3("_EyePos", camera.position);
 		// transform.modelMatrix() combines translation, rotation, and scale into a 4x4 model matrix
-		shader.setMat4("_Model",monkeyTransform.modelMatrix());
-		shader.setMat4("_ViewProjection",camera.projectionMatrix() * camera.viewMatrix());
+		shader.setMat4("_Model", monkeyTransform.modelMatrix());
+		shader.setMat4("_ViewProjection", camera.projectionMatrix() * camera.viewMatrix());
 
 		// set material values
 		shader.setFloat("_Material.Ka", material.Ka);
@@ -112,10 +112,10 @@ void drawUI() {
 		resetCamera(&camera, &cameraController);
 	}
 	if (ImGui::CollapsingHeader("Material")) {
-		ImGui::SliderFloat("AmbientK",&material.Ka,0.0f,1.0f);
-		ImGui::SliderFloat("DiffuseK",&material.Kd,0.0f,1.0f);
-		ImGui::SliderFloat("SpecularK",&material.Ks,0.0f,1.0f);
-		ImGui::SliderFloat("Shininess",&material.Shininess,2.0f,1024.0f);
+		ImGui::SliderFloat("AmbientK", &material.Ka, 0.0f, 1.0f);
+		ImGui::SliderFloat("DiffuseK", &material.Kd, 0.0f, 1.0f);
+		ImGui::SliderFloat("SpecularK", &material.Ks, 0.0f, 1.0f);
+		ImGui::SliderFloat("Shininess", &material.Shininess, 2.0f, 1024.0f);
 	}
 	ImGui::End();
 
@@ -164,4 +164,3 @@ GLFWwindow* initWindow(const char* title, int width, int height) {
 
 	return window;
 }
-
