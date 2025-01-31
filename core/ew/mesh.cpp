@@ -8,7 +8,8 @@
 #include "mesh.h"
 #include "external/glad.h"
 
-namespace ew {
+namespace ew
+{
 	Mesh::Mesh(const MeshData& meshData)
 	{
 		load(meshData);
@@ -33,11 +34,8 @@ namespace ew {
 			glEnableVertexAttribArray(1);
 
 			//UV attribute
-			glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(offsetof(Vertex, uv)));
+			glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(offsetof(Vertex, uv)));
 			glEnableVertexAttribArray(2);
-
-			// tangent attribute
-			glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (const void*)(offsetof(Vertex, tangent)));
 
 			m_initialized = true;
 		}
@@ -68,6 +66,6 @@ namespace ew {
 		else {
 			glDrawArrays(GL_POINTS, 0, m_numVertices);
 		}
-		
+
 	}
 }
