@@ -25,6 +25,17 @@ int screenHeight = 720;
 float prevFrameTime;
 float deltaTime;
 
+float rectangleVertices[] = 
+{  // coords    //texCoords
+	 1.0, -1.0,   1.0, 0.0,
+	-1.0, -1.0,   0.0, 0.0,
+	-1.0,  1.0,   0.0, 1.0,
+	
+	 1.0,  1.0,   1.0, 1.0,
+	 1.0, -1.0,   1.0, 0.0,
+	-1.0,  1.0,   0.0, 1.0
+};
+
 struct Material {
 	float Ka = 1.0;
 	float Kd = 0.5;
@@ -47,13 +58,49 @@ int main() {
 	camera.target = glm::vec3(0.0f, 0.0f, 0.0f); // point camera at the center of the scene
 	camera.aspectRatio = (float)screenWidth / screenHeight;
 	camera.fov = 60.0f; // vertical field of view in degrees
+	
+	unsigned int rectVAO; // vertex array object
+	unsigned int rectVBO; // vertex buffer object
+	glGenVertexArrays(1, &rectVAO);
+	glGenBuffers(1, &rectVBO);
+	glBindVertexArray(rectVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, rectVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(rectangleVertices), &rectangleVertices, GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,4*sizeof(float), (void*)0);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,4*sizeof(float), (void*)(2*sizeof(float)));
+
 
 	ew::Shader shader = ew::Shader("assets/lit.vert", "assets/lit.frag");
+	ew::Shader framebuffer = ew::Shader("assets/framebuffer.vert","assets/framebuffer.frag");
 	ew::Model monkeyModel = ew::Model("assets/suzanne.obj");
-
+	
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK); // Back face culling
 	glEnable(GL_DEPTH_TEST); // depth testing
+
+	unsigned int FBO; // frame buffer object
+	glGenFramebuffers(1, &FBO);
+	glBindFramebuffer(GL_FRAMEBUFFER,FBO);
+	
+	unsigned int framebufferTexture;
+	glGenTextures(1, &framebufferTexture);
+	glBindTexture(GL_TEXTURE_2D, framebufferTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, screenWidth, screenHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebufferTexture,0);
+
+	unsigned int RBO; // render buffer object
+	glGenRenderbuffers(1, &RBO);
+	glBindRenderbuffer(GL_RENDERBUFFER, RBO);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, screenWidth, screenHeight);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO);
+
+
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -62,10 +109,13 @@ int main() {
 		deltaTime = time - prevFrameTime;
 		prevFrameTime = time;
 
+		glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+
 		//RENDER
 		glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+		glEnable(GL_DEPTH_TEST);
+		glEnable(GL_CULL_FACE);
 		cameraController.move(window, &camera, deltaTime);
 
 		//Rotation of model around y axis
@@ -87,6 +137,14 @@ int main() {
 		shader.setFloat("_Material.Shininess", material.Shininess);
 
 		monkeyModel.draw(); // draws the model using the current shader
+
+		glDisable(GL_CULL_FACE);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		framebuffer.use();
+		glBindVertexArray(rectVAO);
+		glDisable(GL_DEPTH_TEST);
+		glBindTexture(GL_TEXTURE_2D, framebufferTexture);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
 
 		drawUI();
 
