@@ -25,6 +25,10 @@ int screenHeight = 720;
 float prevFrameTime;
 float deltaTime;
 
+
+bool doEmboss = false;
+bool doGaussianBlur = false;
+
 float rectangleVertices[] = 
 {  // coords    //texCoords
 	 1.0, -1.0,   1.0, 0.0,
@@ -49,7 +53,7 @@ ew::Transform monkeyTransform;
 ew::CameraController cameraController;
 
 int main() {
-	GLFWwindow* window = initWindow("Assignment 0", screenWidth, screenHeight);
+	GLFWwindow* window = initWindow("Assignment 1", screenWidth, screenHeight);
 	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
 
 	GLuint brickTexture = ew::loadTexture("assets/brick_color.jpg");
@@ -73,7 +77,9 @@ int main() {
 
 
 	ew::Shader shader = ew::Shader("assets/lit.vert", "assets/lit.frag");
-	ew::Shader framebuffer = ew::Shader("assets/framebuffer.vert","assets/framebuffer.frag");
+	ew::Shader emboss = ew::Shader("assets/emboss.vert","assets/emboss.frag");
+	ew::Shader blur = ew::Shader("assets/blur.vert","assets/blur.frag");
+	ew::Shader identity = ew::Shader("assets/identity.vert","assets/identity.frag");
 	ew::Model monkeyModel = ew::Model("assets/suzanne.obj");
 	
 	glEnable(GL_CULL_FACE);
@@ -84,14 +90,12 @@ int main() {
 	glGenFramebuffers(1, &FBO);
 	glBindFramebuffer(GL_FRAMEBUFFER,FBO);
 	
-	unsigned int framebufferTexture;
+	unsigned int framebufferTexture; // texture attachments
 	glGenTextures(1, &framebufferTexture);
 	glBindTexture(GL_TEXTURE_2D, framebufferTexture);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, screenWidth, screenHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebufferTexture,0);
 
 	unsigned int RBO; // render buffer object
@@ -109,7 +113,7 @@ int main() {
 		deltaTime = time - prevFrameTime;
 		prevFrameTime = time;
 
-		glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+		glBindFramebuffer(GL_FRAMEBUFFER, FBO); // bind FBO
 
 		//RENDER
 		glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
@@ -138,12 +142,22 @@ int main() {
 
 		monkeyModel.draw(); // draws the model using the current shader
 
+
 		glDisable(GL_CULL_FACE);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		framebuffer.use();
+		glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind FBO
 		glBindVertexArray(rectVAO);
 		glDisable(GL_DEPTH_TEST);
 		glBindTexture(GL_TEXTURE_2D, framebufferTexture);
+		if (doEmboss) {
+			emboss.use();
+			doGaussianBlur = false;
+		}
+		else if (doGaussianBlur){
+			blur.use();
+		}
+		else {
+			identity.use();
+		}
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 
 		drawUI();
@@ -175,6 +189,11 @@ void drawUI() {
 		ImGui::SliderFloat("SpecularK", &material.Ks, 0.0f, 1.0f);
 		ImGui::SliderFloat("Shininess", &material.Shininess, 2.0f, 1024.0f);
 	}
+	if (ImGui::CollapsingHeader("Effects")) {
+		ImGui::Checkbox("Emboss",&doEmboss);
+		ImGui::Checkbox("Gaussian Blur",&doGaussianBlur);
+	}
+
 	ImGui::End();
 
 	ImGui::Render();
