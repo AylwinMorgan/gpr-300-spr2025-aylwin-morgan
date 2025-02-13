@@ -65,11 +65,8 @@ int main() {
 	camera.fov = 60.0f; // vertical field of view in degrees
 	
 
-	float nearPlane = 1.0f;
-	float farPlane = 7.5f;
-	glm::mat4 lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, nearPlane, farPlane);
-	glm::mat4 lightView = glm::lookAt(glm::vec3(-2.0f, 4.0f, -1.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-	glm::vec4 lightSpaceMatrix = lightProjection * lightView;
+
+
 
 	unsigned int rectVAO; // vertex array object
 	unsigned int rectVBO; // vertex buffer object
@@ -89,7 +86,9 @@ int main() {
 	ew::Shader blur = ew::Shader("assets/blur.vert","assets/blur.frag");
 	ew::Shader identity = ew::Shader("assets/identity.vert","assets/identity.frag");
 	ew::Model monkeyModel = ew::Model("assets/suzanne.obj");
-	ew::Shader simpleDepth = ew::Shader("assets/simpleDepthShader.vert","simpleDepthShader.frag");
+	ew::Shader simpleDepth = ew::Shader("assets/simpleDepthShader.vert","assets/simpleDepthShader.frag");
+	ew::Shader debugDepthMap = ew::Shader("assets/depthMap.vert","assets/depthMap.frag");
+
 
 	glEnable(GL_CULL_FACE);
 	glCullFace(GL_BACK); // Back face culling
@@ -134,6 +133,8 @@ int main() {
 	glReadBuffer(GL_NONE);
 	glBindFramebuffer(GL_FRAMEBUFFER,0);
 
+	float nearPlane = 1.0f;
+	float farPlane = 7.5f;
 
 
 	while (!glfwWindowShouldClose(window)) {
@@ -143,32 +144,54 @@ int main() {
 		deltaTime = time - prevFrameTime;
 		prevFrameTime = time;
 
+		glEnable(GL_DEPTH_TEST);
+		glEnable(GL_CULL_FACE);
+
+		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
 		// render the depth map
+		glm::mat4 lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, nearPlane, farPlane);
+		glm::mat4 lightView = glm::lookAt(glm::vec3(-2.0f, 4.0f, -1.0f),
+			glm::vec3(0.0f, 0.0f, 0.0f),
+			glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 lightSpaceMatrix = lightProjection * lightView;
 		simpleDepth.use();
-		glGetUniformLocation(lightSpaceMatrix);
-		glUniformMatrix4fv(lightSpaceMatrix,1,GL_FALSE, glm::value_ptr(lightSpaceMatrix));
+		glUniformMatrix4fv(glGetUniformLocation(simpleDepth.getId(), "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
+		//simpleDepth.setMat4("lightSpaceMatrix",lightSpaceMatrix);
+		//simpleDepth.setMat4("model",glm::mat4(1.0f));
 
 		glViewport(0,0,SHADOW_WIDTH,SHADOW_HEIGHT);
 		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-		glClear(GL_DEPTH_BUFFER_BIT);
+		  glClear(GL_DEPTH_BUFFER_BIT);
+		  glActiveTexture(GL_TEXTURE0);
+		  glBindTextureUnit(0, brickTexture);
+		  monkeyModel.draw();
+		glBindFramebuffer(GL_FRAMEBUFFER,0);
 
-		
-		//RenderScene();
-
-		// render the scene
-		glBindFramebuffer(GL_FRAMEBUFFER, FBO); // bind FBO
+		// reset view port
 		glViewport(0,0,screenWidth,screenHeight);
-		glClearColor(0.6f, 0.8f, 0.92f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		glEnable(GL_DEPTH_TEST);
-		glEnable(GL_CULL_FACE);
-		cameraController.move(window, &camera, deltaTime);
+
+		debugDepthMap.use();
+		debugDepthMap.setFloat("nearPlane",nearPlane);
+		debugDepthMap.setFloat("farPlane",farPlane);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, depthMap);
+		glBindVertexArray(rectVAO);
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glBindVertexArray(0);
+
+
+		//cameraController.move(window, &camera, deltaTime);
 
 		//Rotation of model around y axis
+		/*
 		monkeyTransform.rotation = glm::rotate(monkeyTransform.rotation, deltaTime, glm::vec3(0.0f, 1.0f, 0.0f));
 
-		glBindTextureUnit(0, brickTexture);
 
+
+		
 		shader.use();
 		shader.setInt("_MainTex", 0);
 		shader.setVec3("_EyePos", camera.position);
@@ -183,13 +206,13 @@ int main() {
 		shader.setFloat("_Material.Shininess", material.Shininess);
 
 		monkeyModel.draw(); // draws the model using the current shader
+		*/
+		
+		//glDisable(GL_CULL_FACE);
+		//glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind FBO
 
-
-		glDisable(GL_CULL_FACE);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind FBO
-		glBindVertexArray(rectVAO);
-		glDisable(GL_DEPTH_TEST);
-		glBindTexture(GL_TEXTURE_2D, framebufferTexture);
+		//glDisable(GL_DEPTH_TEST);
+		/*
 		if (doEmboss) {
 			emboss.use();
 			doGaussianBlur = false;
@@ -199,8 +222,9 @@ int main() {
 		}
 		else {
 			identity.use();
-		}
-		glDrawArrays(GL_TRIANGLES, 0, 6);
+		}*/
+		
+
 
 		drawUI();
 
