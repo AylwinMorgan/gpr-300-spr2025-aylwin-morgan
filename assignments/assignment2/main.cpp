@@ -42,6 +42,17 @@ float rectangleVertices[] =
 	-1.0,  1.0,   0.0, 1.0
 };
 
+float floorVertices[] = {
+	// positions            // normals         // texcoords
+	 25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  25.0f,  0.0f,
+	-25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,   0.0f,  0.0f,
+	-25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 25.0f,
+
+	 25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  25.0f,  0.0f,
+	-25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 25.0f,
+	 25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,  25.0f, 25.0f
+};
+
 struct Material {
 	float Ka = 1.0;
 	float Kd = 0.5;
@@ -52,6 +63,10 @@ struct Material {
 ew::Camera camera;
 ew::Transform monkeyTransform;
 ew::CameraController cameraController;
+unsigned int depthMap;
+float lightPosition[3] = {2.0,0,0};
+float nearPlane = 0.1f;
+float farPlane = 7.5f;
 
 int main() {
 	GLFWwindow* window = initWindow("Assignment 1", screenWidth, screenHeight);
@@ -80,7 +95,7 @@ int main() {
 
 	ew::Shader shader = ew::Shader("assets/lit.vert", "assets/lit.frag");
 	ew::Shader emboss = ew::Shader("assets/emboss.vert","assets/emboss.frag");
-	ew::Shader blur = ew::Shader("assets/blur.vert","assets/blur.frag");
+	//ew::Shader blur = ew::Shader("assets/blur.vert","assets/blur.frag");
 	ew::Shader identity = ew::Shader("assets/identity.vert","assets/identity.frag");
 	ew::Model monkeyModel = ew::Model("assets/suzanne.obj");
 	ew::Shader simpleDepth = ew::Shader("assets/simpleDepthShader.vert","assets/simpleDepthShader.frag");
@@ -115,7 +130,7 @@ int main() {
 	const unsigned int SHADOW_WIDTH = 1024; // define width and height of shadow map
 	const unsigned int SHADOW_HEIGHT = 1024;
 
-	unsigned int depthMap;
+	// depth map
 	glGenTextures(1, &depthMap);
 	glBindTexture(GL_TEXTURE_2D, depthMap);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
@@ -147,10 +162,8 @@ int main() {
 		//monkeyTransform.rotation = glm::rotate(monkeyTransform.rotation, deltaTime, glm::vec3(0.0f, 1.0f, 0.0f));
 		cameraController.move(window, &camera, deltaTime);
 
-		float nearPlane = 1.0f;
-		float farPlane = 12.0f;
-		glm::vec3 lightPos(-2.0f, 5.0f, 5.0f);
-		glm::mat4 lightProjection = glm::ortho(-35.0f, 35.0f, -35.0f, 35.0f, nearPlane, farPlane);
+		glm::vec3 lightPos(lightPosition[0], lightPosition[1], lightPosition[2]);
+		glm::mat4 lightProjection = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, nearPlane, farPlane);
 		glm::mat4 lightView = glm::lookAt(lightPos,
 			glm::vec3(0.0f, 0.0f, 0.0f),
 			glm::vec3(0.0f, 1.0f, 0.0f));
@@ -164,6 +177,8 @@ int main() {
     	glClear(GL_DEPTH_BUFFER_BIT);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, brickTexture);
+
+
 		monkeyModel.draw();
 
 		glBindFramebuffer(GL_FRAMEBUFFER,0);
@@ -173,7 +188,6 @@ int main() {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		// render normal scene
-		glBindTexture(GL_TEXTURE_2D, depthMap);
 		shadowMap.use();
 		glm::mat4 projection = camera.projectionMatrix();
 		glm::mat4 view = camera.viewMatrix();
@@ -187,6 +201,7 @@ int main() {
 		glBindTexture(GL_TEXTURE_2D,brickTexture);
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D,depthMap);
+
 
 		monkeyModel.draw();
 
@@ -223,7 +238,24 @@ void drawUI() {
 		ImGui::Checkbox("Emboss",&doEmboss);
 		ImGui::Checkbox("Gaussian Blur",&doGaussianBlur);
 	}
-
+	if (ImGui::CollapsingHeader("Light Source")) {
+		// light position
+		ImGui::SliderFloat3("Light Position", lightPosition,-4.0,4.0);
+		// near plane
+		ImGui::SliderFloat("Near Plane",&nearPlane,0.1,10.0);
+		// far plane
+		ImGui::SliderFloat("Far Plane", &farPlane, 0.1, 10.0);
+	}
+	ImGui::End();
+	ImGui::Begin("Shadow Map");
+	//Using a Child allow to fill all the space of the window.
+	ImGui::BeginChild("Shadow Map");
+	//Stretch image to be window size
+	ImVec2 windowSize = ImGui::GetWindowSize();
+	//Invert 0-1 V to flip vertically for ImGui display
+	//shadowMap is the texture2D handle
+	ImGui::Image((ImTextureID)depthMap, windowSize, ImVec2(0, 1), ImVec2(1, 0));
+	ImGui::EndChild();
 	ImGui::End();
 
 	ImGui::Render();
