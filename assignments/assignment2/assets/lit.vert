@@ -5,7 +5,11 @@ layout(location = 1) in vec3 vNormal; // Vertex normal in model space
 layout(location = 2) in vec2 vTexCoord; // vertex texture coordinate (UV)
 uniform mat4 _Model; // Model->World Matrix
 uniform mat4 _ViewProjection; // Combined View-> Projection matrix
+uniform mat4 lightProjection;
+
 out vec3 Normal; // Output for next shader
+out vec4 fragPosLight;
+
 // this whole block will be passed to the next shader stage
 out Surface{
 	vec3 WorldPos; // vertex position in world space
@@ -20,4 +24,6 @@ void main(){
 	vs_out.TexCoord = vTexCoord;
 	// Transform vertex position to homogeneous clip space
 	gl_Position = _ViewProjection * _Model * vec4(vPos,1.0);
+
+	fragPosLight = lightProjection * vec4(vs_out.WorldPos,1.0f);
 }

@@ -63,9 +63,6 @@ int main() {
 	camera.target = glm::vec3(0.0f, 0.0f, 0.0f); // point camera at the center of the scene
 	camera.aspectRatio = (float)screenWidth / screenHeight;
 	camera.fov = 60.0f; // vertical field of view in degrees
-	
-
-
 
 
 	unsigned int rectVAO; // vertex array object
@@ -87,7 +84,7 @@ int main() {
 	ew::Shader identity = ew::Shader("assets/identity.vert","assets/identity.frag");
 	ew::Model monkeyModel = ew::Model("assets/suzanne.obj");
 	ew::Shader simpleDepth = ew::Shader("assets/simpleDepthShader.vert","assets/simpleDepthShader.frag");
-	ew::Shader debugDepthMap = ew::Shader("assets/depthMap.vert","assets/depthMap.frag");
+	ew::Shader shadowMap = ew::Shader("assets/shadowMapping.vert","assets/shadowMapping.frag");
 
 
 	glEnable(GL_CULL_FACE);
@@ -112,10 +109,10 @@ int main() {
 	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, screenWidth, screenHeight);
 	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, RBO);
 
-	unsigned int depthMapFBO;
+	unsigned int depthMapFBO;  // create frame buffer for shadows
 	glGenFramebuffers(1,&depthMapFBO);
 
-	const unsigned int SHADOW_WIDTH = 1024;
+	const unsigned int SHADOW_WIDTH = 1024; // define width and height of shadow map
 	const unsigned int SHADOW_HEIGHT = 1024;
 
 	unsigned int depthMap;
@@ -133,8 +130,6 @@ int main() {
 	glReadBuffer(GL_NONE);
 	glBindFramebuffer(GL_FRAMEBUFFER,0);
 
-	float nearPlane = 1.0f;
-	float farPlane = 7.5f;
 
 
 	while (!glfwWindowShouldClose(window)) {
@@ -143,88 +138,57 @@ int main() {
 		float time = (float)glfwGetTime();
 		deltaTime = time - prevFrameTime;
 		prevFrameTime = time;
-
+		cameraController.move(window, &camera, deltaTime);
+		
 		glEnable(GL_DEPTH_TEST);
-		glEnable(GL_CULL_FACE);
-
 		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		// render the depth map
-		glm::mat4 lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, nearPlane, farPlane);
-		glm::mat4 lightView = glm::lookAt(glm::vec3(-2.0f, 4.0f, -1.0f),
+		//monkeyTransform.rotation = glm::rotate(monkeyTransform.rotation, deltaTime, glm::vec3(0.0f, 1.0f, 0.0f));
+		cameraController.move(window, &camera, deltaTime);
+
+		float nearPlane = 1.0f;
+		float farPlane = 12.0f;
+		glm::vec3 lightPos(-2.0f, 5.0f, 5.0f);
+		glm::mat4 lightProjection = glm::ortho(-35.0f, 35.0f, -35.0f, 35.0f, nearPlane, farPlane);
+		glm::mat4 lightView = glm::lookAt(lightPos,
 			glm::vec3(0.0f, 0.0f, 0.0f),
 			glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 lightSpaceMatrix = lightProjection * lightView;
 		simpleDepth.use();
-		glUniformMatrix4fv(glGetUniformLocation(simpleDepth.getId(), "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
-		//simpleDepth.setMat4("lightSpaceMatrix",lightSpaceMatrix);
-		//simpleDepth.setMat4("model",glm::mat4(1.0f));
+		simpleDepth.setMat4("lightSpaceMatrix",lightSpaceMatrix);
+		simpleDepth.setMat4("model",monkeyTransform.modelMatrix());
 
-		glViewport(0,0,SHADOW_WIDTH,SHADOW_HEIGHT);
+		glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
 		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
-		  glClear(GL_DEPTH_BUFFER_BIT);
-		  glActiveTexture(GL_TEXTURE0);
-		  glBindTextureUnit(0, brickTexture);
-		  monkeyModel.draw();
+    	glClear(GL_DEPTH_BUFFER_BIT);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, brickTexture);
+		monkeyModel.draw();
+
 		glBindFramebuffer(GL_FRAMEBUFFER,0);
 
-		// reset view port
-		glViewport(0,0,screenWidth,screenHeight);
+		// reset viewport
+		glViewport(0, 0, screenWidth, screenHeight);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		debugDepthMap.use();
-		debugDepthMap.setFloat("nearPlane",nearPlane);
-		debugDepthMap.setFloat("farPlane",farPlane);
-		glActiveTexture(GL_TEXTURE0);
+		// render normal scene
 		glBindTexture(GL_TEXTURE_2D, depthMap);
-		glBindVertexArray(rectVAO);
-		glDrawArrays(GL_TRIANGLES, 0, 6);
-		glBindVertexArray(0);
+		shadowMap.use();
+		glm::mat4 projection = camera.projectionMatrix();
+		glm::mat4 view = camera.viewMatrix();
+		shadowMap.setMat4("projection",projection);
+		shadowMap.setMat4("view",view);
+		shadowMap.setMat4("model", monkeyTransform.modelMatrix());
+		shadowMap.setVec3("viewPos",camera.position);
+		shadowMap.setVec3("lightPos",lightPos);
+		shadowMap.setMat4("lightSpaceMatrix",lightSpaceMatrix);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D,brickTexture);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D,depthMap);
 
-
-		//cameraController.move(window, &camera, deltaTime);
-
-		//Rotation of model around y axis
-		/*
-		monkeyTransform.rotation = glm::rotate(monkeyTransform.rotation, deltaTime, glm::vec3(0.0f, 1.0f, 0.0f));
-
-
-
-		
-		shader.use();
-		shader.setInt("_MainTex", 0);
-		shader.setVec3("_EyePos", camera.position);
-		// transform.modelMatrix() combines translation, rotation, and scale into a 4x4 model matrix
-		shader.setMat4("_Model", monkeyTransform.modelMatrix());
-		shader.setMat4("_ViewProjection", camera.projectionMatrix() * camera.viewMatrix());
-
-		// set material values
-		shader.setFloat("_Material.Ka", material.Ka);
-		shader.setFloat("_Material.Kd", material.Kd);
-		shader.setFloat("_Material.Ks", material.Ks);
-		shader.setFloat("_Material.Shininess", material.Shininess);
-
-		monkeyModel.draw(); // draws the model using the current shader
-		*/
-		
-		//glDisable(GL_CULL_FACE);
-		//glBindFramebuffer(GL_FRAMEBUFFER, 0); // unbind FBO
-
-		//glDisable(GL_DEPTH_TEST);
-		/*
-		if (doEmboss) {
-			emboss.use();
-			doGaussianBlur = false;
-		}
-		else if (doGaussianBlur){
-			blur.use();
-		}
-		else {
-			identity.use();
-		}*/
-		
-
+		monkeyModel.draw();
 
 		drawUI();
 

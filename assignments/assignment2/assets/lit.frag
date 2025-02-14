@@ -5,7 +5,11 @@ in Surface{
 	vec3 WorldNormal; // vertex normal in world space
 	vec2 TexCoord;
 }fs_in;
+in vec4 fragPosLight;
 uniform sampler2D _MainTex; // 2D texture sampler
+uniform sampler2D shadowMap;
+
+
 // light pointing straight down
 uniform vec3 _EyePos;
 uniform vec3 _LightDirection = vec3(0.0,-1.0,0.0);
@@ -19,6 +23,17 @@ struct Material{
 };
 uniform Material _Material;
 void main(){
+	float shadow = 0.0f;
+	vec3 lightCoords = fragPosLight.xyz / fragPosLight.w;
+	if(lightCoords.z <= 1.0f){
+		lightCoords = (lightCoords + 1.0f) / 2.0f;
+		float closestDepth = texture(shadowMap, lightCoords.xy).r;
+		float currentDepth = lightCoords.z;
+
+		if (currentDepth > closestDepth){
+			shadow = 1.0f;
+		}
+	}
 	// make sure fragment normal is still length 1 after interpolation
 	vec3 normal = normalize(fs_in.WorldNormal);
 	// light pointing straight down
@@ -30,7 +45,7 @@ void main(){
 	vec3 h = normalize(toLight + toEye);
 	float specularFactor = pow(max(dot(normal,h),0.0),_Material.Shininess);
 	// amount of light diffusely reflecting off surface
-	vec3 lightColor = (_Material.Kd * diffuseFactor + _Material.Ks * specularFactor) * _LightColor;
+	vec3 lightColor = (_Material.Kd * diffuseFactor * (1.0f - shadow) + _Material.Ks * specularFactor * (1.0f - shadow)) * _LightColor;
 	lightColor += _AmbientColor * _Material.Ka;
 	vec3 objectColor = texture(_MainTex,fs_in.TexCoord).rgb;
 	FragColor = vec4(objectColor * lightColor,1.0);
