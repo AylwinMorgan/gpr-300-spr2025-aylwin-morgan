@@ -102,10 +102,10 @@ int main() {
 	ew::Shader shadowMap = ew::Shader("assets/shadowMapping.vert","assets/shadowMapping.frag");
 
 
-	glEnable(GL_CULL_FACE);
-	glCullFace(GL_BACK); // Back face culling
+	//glEnable(GL_CULL_FACE);
+	//glCullFace(GL_BACK); // Back face culling
 	glEnable(GL_DEPTH_TEST); // depth testing
-
+	/*
 	unsigned int FBO; // frame buffer object
 	glGenFramebuffers(1, &FBO);
 	glBindFramebuffer(GL_FRAMEBUFFER,FBO);
@@ -117,7 +117,7 @@ int main() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebufferTexture,0);
-
+	*/
 	unsigned int RBO; // render buffer object
 	glGenRenderbuffers(1, &RBO);
 	glBindRenderbuffer(GL_RENDERBUFFER, RBO);
@@ -145,7 +145,9 @@ int main() {
 	glReadBuffer(GL_NONE);
 	glBindFramebuffer(GL_FRAMEBUFFER,0);
 
-
+	shadowMap.use();
+	shadowMap.setInt("diffuseTexture", 0);
+	shadowMap.setInt("shadowMap", 1);
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -160,7 +162,6 @@ int main() {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		//monkeyTransform.rotation = glm::rotate(monkeyTransform.rotation, deltaTime, glm::vec3(0.0f, 1.0f, 0.0f));
-		cameraController.move(window, &camera, deltaTime);
 
 		glm::vec3 lightPos(lightPosition[0], lightPosition[1], lightPosition[2]);
 		glm::mat4 lightProjection = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, nearPlane, farPlane);

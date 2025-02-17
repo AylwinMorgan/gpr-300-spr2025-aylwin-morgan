@@ -31,7 +31,7 @@ void main(){
 	//ambient
 	vec3 ambient = 0.15 * lightColor;
 	//diffuse 
-	vec3 lightDir = normalize(viewPos - fs_in.FragPos);
+	vec3 lightDir = normalize(lightPos - fs_in.FragPos);
 	float diff = max(dot(lightDir, normal), 0.0);
 	vec3 diffuse = diff * lightColor;
 	// specular
