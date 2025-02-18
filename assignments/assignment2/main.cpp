@@ -20,7 +20,7 @@
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 GLFWwindow* initWindow(const char* title, int width, int height);
 void drawUI();
-void renderScene(const ew::Shader &shader, const ew::Model monkeyModel);
+void renderScene(const ew::Shader &shader, const ew::Model monkeyModel, float time);
 
 void renderCube();
 unsigned int cubeVAO = 0;
@@ -31,6 +31,10 @@ int screenWidth = 1080;
 int screenHeight = 720;
 float prevFrameTime;
 float deltaTime;
+
+float minBias = 0.005f;
+
+float maxBias = 0.05f;
 
 bool doEmboss = false;
 bool doGaussianBlur = false;
@@ -46,6 +50,17 @@ float rectangleVertices[] =
 	-1.0,  1.0,   0.0, 1.0
 };
 
+float floorVertices[] = {
+	// positions            // normals         // texcoords
+	 25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  25.0f,  0.0f,
+	-25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,   0.0f,  0.0f,
+	-25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 25.0f,
+
+	 25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  25.0f,  0.0f,
+	-25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 25.0f,
+	 25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,  25.0f, 25.0f
+};
+
 struct Material {
 	float Ka = 1.0;
 	float Kd = 0.5;
@@ -56,8 +71,12 @@ struct Material {
 ew::Camera camera;
 ew::Transform monkeyTransform;
 ew::CameraController cameraController;
-unsigned int planeVAO;
 
+unsigned int planeVAO;
+unsigned int depthMap;
+float lightPosition[3] = {-2.0,4.0,-1.0};
+float nearPlane = 1.0f;
+float farPlane = 7.5f;
 
 int main() {
 	GLFWwindow* window = initWindow("Assignment 1", screenWidth, screenHeight);
@@ -71,23 +90,30 @@ int main() {
 	camera.fov = 60.0f; // vertical field of view in degrees
 
 
-	float planeVertices[] = {
-		// positions            // normals         // tex coords
-		 25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  25.0f,  0.0f,
-		-25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,   0.0f,  0.0f,
-		-25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 25.0f,
+    float planeVertices[] = {
+        // positions            // normals         // texcoords
+         5.0f, -0.5f,  5.0f,  0.0f, 1.0f, 0.0f,  5.0f,  0.0f,
+        -5.0f, -0.5f,  5.0f,  0.0f, 1.0f, 0.0f,   0.0f,  0.0f,
+        -5.0f, -0.5f, -5.0f,  0.0f, 1.0f, 0.0f,   0.0f, 5.0f,
 
-		 25.0f, -0.5f,  25.0f,  0.0f, 1.0f, 0.0f,  25.0f,  0.0f,
-		-25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,   0.0f, 25.0f,
-		 25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,  25.0f, 25.0f
-	};
-	// plane VAO
-	unsigned int planeVBO;
-	glGenVertexArrays(1, &planeVAO);
-	glGenBuffers(1, &planeVBO);
-	glBindVertexArray(planeVAO);
-	glBindBuffer(GL_ARRAY_BUFFER, planeVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(planeVertices), planeVertices, GL_STATIC_DRAW);
+         5.0f, -0.5f,  5.0f,  0.0f, 1.0f, 0.0f,  5.0f,  0.0f,
+        -5.0f, -0.5f, -5.0f,  0.0f, 1.0f, 0.0f,   0.0f, 5.0f,
+         5.0f, -0.5f, -5.0f,  0.0f, 1.0f, 0.0f,  5.0f, 5.0f
+    };
+    // plane VAO
+    unsigned int planeVBO;
+    glGenVertexArrays(1, &planeVAO);
+    glGenBuffers(1, &planeVBO);
+    glBindVertexArray(planeVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, planeVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(planeVertices), planeVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glBindVertexArray(0);
 
 	unsigned int rectVAO; // vertex array object
 	unsigned int rectVBO; // vertex buffer object
@@ -104,16 +130,15 @@ int main() {
 
 	ew::Shader shader = ew::Shader("assets/lit.vert", "assets/lit.frag");
 	ew::Shader emboss = ew::Shader("assets/emboss.vert","assets/emboss.frag");
-	ew::Shader blur = ew::Shader("assets/blur.vert","assets/blur.frag");
+	//ew::Shader blur = ew::Shader("assets/blur.vert","assets/blur.frag");
 	ew::Shader identity = ew::Shader("assets/identity.vert","assets/identity.frag");
 	ew::Shader simpleDepth = ew::Shader("assets/simpleDepthShader.vert","assets/simpleDepthShader.frag");
 	ew::Shader shadowMap = ew::Shader("assets/shadowMapping.vert","assets/shadowMapping.frag");
 	ew::Model monkeyModel = ew::Model("assets/suzanne.obj");
 
-	glEnable(GL_CULL_FACE);
-	glCullFace(GL_BACK); // Back face culling
 	glEnable(GL_DEPTH_TEST); // depth testing
 
+	/*
 	unsigned int FBO; // frame buffer object
 	glGenFramebuffers(1, &FBO);
 	glBindFramebuffer(GL_FRAMEBUFFER,FBO);
@@ -125,7 +150,7 @@ int main() {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebufferTexture,0);
-
+	*/
 	unsigned int RBO; // render buffer object
 	glGenRenderbuffers(1, &RBO);
 	glBindRenderbuffer(GL_RENDERBUFFER, RBO);
@@ -138,22 +163,26 @@ int main() {
 	const unsigned int SHADOW_WIDTH = 1024; // define width and height of shadow map
 	const unsigned int SHADOW_HEIGHT = 1024;
 
-	unsigned int depthMap;
+	// depth texture
 	glGenTextures(1, &depthMap);
 	glBindTexture(GL_TEXTURE_2D, depthMap);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+	float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+	// attach depth texture as FBO's depth buffer
 	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
 	glDrawBuffer(GL_NONE);
 	glReadBuffer(GL_NONE);
 	glBindFramebuffer(GL_FRAMEBUFFER,0);
 
-
+    shadowMap.use();
+    shadowMap.setInt("diffuseTexture", 0);
+    shadowMap.setInt("shadowMap", 1);
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -164,30 +193,24 @@ int main() {
 		cameraController.move(window, &camera, deltaTime);
 		
 		glEnable(GL_DEPTH_TEST);
-		glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+		glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		//monkeyTransform.rotation = glm::rotate(monkeyTransform.rotation, deltaTime, glm::vec3(0.0f, 1.0f, 0.0f));
-		cameraController.move(window, &camera, deltaTime);
-
-		float nearPlane = 1.0f;
-		float farPlane = 12.0f;
-		glm::vec3 lightPos(-2.0f, 5.0f, 5.0f);
-		glm::mat4 lightProjection = glm::ortho(-35.0f, 35.0f, -35.0f, 35.0f, nearPlane, farPlane);
+		
+		glm::vec3 lightPos(lightPosition[0], lightPosition[1], lightPosition[2]);
+		glm::mat4 lightProjection = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, nearPlane, farPlane);
 		glm::mat4 lightView = glm::lookAt(lightPos,
 			glm::vec3(0.0f, 0.0f, 0.0f),
 			glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 lightSpaceMatrix = lightProjection * lightView;
 		simpleDepth.use();
 		simpleDepth.setMat4("lightSpaceMatrix",lightSpaceMatrix);
-		simpleDepth.setMat4("model",monkeyTransform.modelMatrix());
 
 		glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
 		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
     	glClear(GL_DEPTH_BUFFER_BIT);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, brickTexture);
-		renderScene(simpleDepth, monkeyModel);
+		renderScene(simpleDepth, monkeyModel, time);
 
 		glBindFramebuffer(GL_FRAMEBUFFER,0);
 
@@ -196,22 +219,22 @@ int main() {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		// render normal scene
-		glBindTexture(GL_TEXTURE_2D, depthMap);
 		shadowMap.use();
 		glm::mat4 projection = camera.projectionMatrix();
 		glm::mat4 view = camera.viewMatrix();
 		shadowMap.setMat4("projection",projection);
 		shadowMap.setMat4("view",view);
-		shadowMap.setMat4("model", monkeyTransform.modelMatrix());
 		shadowMap.setVec3("viewPos",camera.position);
 		shadowMap.setVec3("lightPos",lightPos);
 		shadowMap.setMat4("lightSpaceMatrix",lightSpaceMatrix);
+		shadowMap.setFloat("maxBias",maxBias);
+		shadowMap.setFloat("minBias",minBias);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D,brickTexture);
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D,depthMap);
 
-		renderScene(shadowMap, monkeyModel);
+		renderScene(shadowMap, monkeyModel, time);
 
 		drawUI();
 
@@ -246,7 +269,28 @@ void drawUI() {
 		ImGui::Checkbox("Emboss",&doEmboss);
 		ImGui::Checkbox("Gaussian Blur",&doGaussianBlur);
 	}
-
+	if (ImGui::CollapsingHeader("Light Source")) {
+		// light position
+		ImGui::SliderFloat3("Light Position", lightPosition,-8.0,8.0);
+		// near plane
+		ImGui::SliderFloat("Near Plane",&nearPlane,0.1,10.0);
+		// far plane
+		ImGui::SliderFloat("Far Plane", &farPlane, 0.1, 10.0);
+		// min bias
+		ImGui::SliderFloat("Min Bias",&minBias, 0.0f,1.0f);
+		// max bias 
+		ImGui::SliderFloat("Max Bias", &maxBias, 0.0f, 1.0f);
+	}
+	ImGui::End();
+	ImGui::Begin("Shadow Map");
+	//Using a Child allow to fill all the space of the window.
+	ImGui::BeginChild("Shadow Map");
+	//Stretch image to be window size
+	ImVec2 windowSize = ImGui::GetWindowSize();
+	//Invert 0-1 V to flip vertically for ImGui display
+	//shadowMap is the texture2D handle
+	ImGui::Image((ImTextureID)depthMap, windowSize, ImVec2(0, 1), ImVec2(1, 0));
+	ImGui::EndChild();
 	ImGui::End();
 
 	ImGui::Render();
@@ -295,20 +339,42 @@ GLFWwindow* initWindow(const char* title, int width, int height) {
 	return window;
 }
 
-void renderScene(const ew::Shader& shader, ew::Model monkeyModel) {
-	shader.setMat4("model", glm::mat4(1.0f));
+void renderScene(const ew::Shader& shader, ew::Model monkeyModel, float time) {
+	glm::mat4 model = glm::mat4(1.0f);
+	shader.setMat4("model", model);
 	glBindVertexArray(planeVAO);
 	glDrawArrays(GL_TRIANGLES,0,6);
-	shader.setMat4("model", monkeyTransform.modelMatrix());
-	//monkeyModel.draw();
-	glm::mat4 model = glm::mat4(1.0f);
-	model = glm::translate(model, glm::vec3(0.0f, 1.5f, 0.0));
-	model = glm::scale(model, glm::vec3(0.5f));
+	
+	model = monkeyTransform.modelMatrix();
+	model = glm::translate(model,glm::vec3(1.5f,1.5f,1.5f));
+	model = glm::rotate(model, time, glm::vec3(0.0f,1.0f,0.0f));
+	model = glm::scale(model, glm::vec3(0.75f,0.75f,0.75f));
 	shader.setMat4("model", model);
-	renderCube();
+	monkeyModel.draw();
+	
+	model = monkeyTransform.modelMatrix();
+	model = glm::translate(model,glm::vec3(1.5f,1.5f,-1.5f));
+	model = glm::rotate(model, time, glm::vec3(0.0f, 1.0f, 0.0f));
+	model = glm::scale(model, glm::vec3(0.75f, 0.75f, 0.75f));
+	shader.setMat4("model", model);
+	monkeyModel.draw();
 
+	model = monkeyTransform.modelMatrix();
+	model = glm::translate(model,glm::vec3(-1.5f,1.5f,1.5f));
+	model = glm::rotate(model, time, glm::vec3(0.0f, 1.0f, 0.0f));
+	model = glm::scale(model, glm::vec3(0.75f, 0.75f, 0.75f));
+	shader.setMat4("model", model);
+	monkeyModel.draw();
+	
+	model = monkeyTransform.modelMatrix();
+	model = glm::translate(model,glm::vec3(-1.5f,1.5f,-1.5f));
+	model = glm::rotate(model, time, glm::vec3(0.0f, 1.0f, 0.0f));
+	model = glm::scale(model, glm::vec3(0.75f, 0.75f, 0.75f));
+	shader.setMat4("model", model);
+	monkeyModel.draw();
 }
 
+// I copied this function in from learnopengl.com to make testing easier
 void renderCube()
 {
 	// initialize (if necessary)
