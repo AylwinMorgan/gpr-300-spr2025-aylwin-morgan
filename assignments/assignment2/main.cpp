@@ -138,19 +138,6 @@ int main() {
 
 	glEnable(GL_DEPTH_TEST); // depth testing
 
-	/*
-	unsigned int FBO; // frame buffer object
-	glGenFramebuffers(1, &FBO);
-	glBindFramebuffer(GL_FRAMEBUFFER,FBO);
-	
-	unsigned int framebufferTexture; // texture attachments
-	glGenTextures(1, &framebufferTexture);
-	glBindTexture(GL_TEXTURE_2D, framebufferTexture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, screenWidth, screenHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebufferTexture,0);
-	*/
 	unsigned int RBO; // render buffer object
 	glGenRenderbuffers(1, &RBO);
 	glBindRenderbuffer(GL_RENDERBUFFER, RBO);
@@ -180,9 +167,10 @@ int main() {
 	glReadBuffer(GL_NONE);
 	glBindFramebuffer(GL_FRAMEBUFFER,0);
 
-    shadowMap.use();
-    shadowMap.setInt("diffuseTexture", 0);
-    shadowMap.setInt("shadowMap", 1);
+
+	shadowMap.use();
+	shadowMap.setInt("diffuseTexture", 0);
+	shadowMap.setInt("shadowMap", 1);
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -195,7 +183,7 @@ int main() {
 		glEnable(GL_DEPTH_TEST);
 		glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		
+
 		glm::vec3 lightPos(lightPosition[0], lightPosition[1], lightPosition[2]);
 		glm::mat4 lightProjection = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, nearPlane, farPlane);
 		glm::mat4 lightView = glm::lookAt(lightPos,
