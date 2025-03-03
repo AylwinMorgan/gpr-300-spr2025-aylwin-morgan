@@ -22,9 +22,20 @@
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 GLFWwindow* initWindow(const char* title, int width, int height);
 void drawUI();
-void renderScene(const ew::Shader &shader, const ew::Model monkeyModel, float time);
+void renderScene(const ew::Shader &shader, const glm::mat4 monkeyMatrix, ew::Model monkeyModel, float time);
 
 void renderCube();
+
+float lerp(float a, float b, float t);
+glm::vec3 lerp(glm::vec3 a, glm::vec3 b, float t);
+float inverseLerp(float a, float b, float x);
+
+glm::vec3 getCurrentPosition(Animator* animator);
+glm::vec3 getCurrentRotation(Animator* animator);
+glm::vec3 getCurrentScale(Animator* animator);
+
+glm::vec3 getCurrentVec3FromKeyframes(Animator* animator, std::vector<Vec3Keyframe*> keyframes);
+
 unsigned int cubeVAO = 0;
 unsigned int cubeVBO = 0;
 
@@ -205,7 +216,35 @@ int main() {
     	glClear(GL_DEPTH_BUFFER_BIT);
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, brickTexture);
-		renderScene(simpleDepth, monkeyModel, time);
+
+		glm::mat4 model = monkeyTransform.modelMatrix();
+
+		if (animator->isPlaying) {
+			animator->playbackTime += deltaTime * animator->playbackSpeed;
+			if (animator->isLooping && animator->playbackTime > animator->clip->duration) {
+				animator->playbackTime = 0;
+			}
+			if (animator->clip->positionFrames.size() > 0){
+				model = glm::translate(model, getCurrentPosition(animator));
+			}
+			if (animator->clip->rotationFrames.size() > 0){
+				model = glm::rotate(model, getCurrentRotation(animator)[0], glm::vec3(1.0f, 0.0f, 0.0f));
+				model = glm::rotate(model, getCurrentRotation(animator)[1], glm::vec3(0.0f, 1.0f, 0.0f));
+				model = glm::rotate(model, getCurrentRotation(animator)[2], glm::vec3(0.0f, 0.0f, 1.0f));
+			}
+			if (animator->clip->scaleFrames.size() > 0){
+				//model = glm::scale(model, getCurrentScale(animator));
+				glm::vec3 scale = getCurrentScale(animator);
+				//model = glm::scale(model,glm::vec3(2.0f,1.0f,1.0f));
+				//glm::vec4 scalar = glm::vec4(getCurrentScale(animator),1.0f);
+				model = glm::scale(model, scale);
+			}
+		}
+
+		simpleDepth.setMat4("model", model);
+		monkeyModel.draw();
+
+		//renderScene(simpleDepth, model, monkeyModel, time);
 
 		glBindFramebuffer(GL_FRAMEBUFFER,0);
 
@@ -229,7 +268,12 @@ int main() {
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D,depthMap);
 
-		renderScene(shadowMap, monkeyModel, time);
+
+
+		shadowMap.setMat4("model", model);
+		monkeyModel.draw();
+
+		//renderScene(shadowMap, model, monkeyModel, time);
 
 		drawUI();
 
@@ -295,45 +339,45 @@ void drawUI() {
 	if (ImGui::CollapsingHeader("Position Keyframes")) {
 		for (int i = 0; i < animator->clip->positionFrames.size(); i++) {
 			ImGui::PushID(i);
-			ImGui::SliderFloat("Time", &animator->clip->positionFrames[i].time, 0.0f, animator->clip->duration);
-			ImGui::SliderFloat3("Values", animator->clip->positionFrames[i].value, 0.0f, 10.0f);
+			ImGui::SliderFloat("Time", &animator->clip->positionFrames[i]->time, 0.0f, animator->clip->duration);
+			ImGui::SliderFloat3("Values", animator->clip->positionFrames[i]->value, 0.0f, 10.0f);
 			ImGui::PopID();
 		}
 		if (ImGui::Button("Add Keyframe")) {
-			
+			animator->clip->positionFrames.push_back(new Vec3Keyframe);
 		}
 		if (ImGui::Button("Remove Keyframe")) {
-
+			animator->clip->positionFrames.pop_back();
 		}
 	}
 	//--manage rotation keyframes--
 	if (ImGui::CollapsingHeader("Rotation Keyframes")) {
 		for (int i = 0; i < animator->clip->rotationFrames.size(); i++) {
 			ImGui::PushID(i);
-			ImGui::SliderFloat("Time", &animator->clip->rotationFrames[i].time, 0.0f, animator->clip->duration);
-			ImGui::SliderFloat3("Values", animator->clip->rotationFrames[i].value, 0.0f, 10.0f);
+			ImGui::SliderFloat("Time", &animator->clip->rotationFrames[i]->time, 0.0f, animator->clip->duration);
+			ImGui::SliderFloat3("Values", animator->clip->rotationFrames[i]->value, 0.0f, 10.0f);
 			ImGui::PopID();
 		}
 		if (ImGui::Button("Add Keyframe")) {
-
+			animator->clip->rotationFrames.push_back(new Vec3Keyframe);
 		}
 		if (ImGui::Button("Remove Keyframe")) {
-
+			animator->clip->rotationFrames.pop_back();
 		}
 	}
 	//--manage scale keyframes--
 	if (ImGui::CollapsingHeader("Scale Keyframes")) {
 		for (int i = 0; i < animator->clip->scaleFrames.size(); i++) {
 			ImGui::PushID(i);
-			ImGui::SliderFloat("Time", &animator->clip->scaleFrames[i].time, 0.0f, animator->clip->duration);
-			ImGui::SliderFloat3("Values", animator->clip->scaleFrames[i].value, 0.0f, 10.0f);
+			ImGui::SliderFloat("Time", &animator->clip->scaleFrames[i]->time, 0.0f, animator->clip->duration);
+			ImGui::SliderFloat3("Values", animator->clip->scaleFrames[i]->value, 0.0f, 10.0f);
 			ImGui::PopID();
 		}
 		if (ImGui::Button("Add Keyframe")) {
-
+			animator->clip->scaleFrames.push_back(new Vec3Keyframe(1.0f,1.0f,1.0f));
 		}
 		if (ImGui::Button("Remove Keyframe")) {
-
+			animator->clip->scaleFrames.pop_back();
 		}
 	}
 
@@ -395,42 +439,18 @@ GLFWwindow* initWindow(const char* title, int width, int height) {
 	return window;
 }
 
-void renderScene(const ew::Shader& shader, ew::Model monkeyModel, float time) {
+void renderScene(const ew::Shader& shader, glm::mat4 monkeyMatrix, ew::Model monkeyModel, float time) {
 	glm::mat4 model = glm::mat4(1.0f);
 	shader.setMat4("model", model);
 	glBindVertexArray(planeVAO);
 	glDrawArrays(GL_TRIANGLES,0,6);
 	
-	model = monkeyTransform.modelMatrix();
-	model = glm::translate(model,glm::vec3(1.5f,1.5f,1.5f));
-	model = glm::rotate(model, time, glm::vec3(0.0f,1.0f,0.0f));
-	model = glm::scale(model, glm::vec3(0.75f,0.75f,0.75f));
-	shader.setMat4("model", model);
-	monkeyModel.draw();
+	shader.setMat4("model", monkeyMatrix);
 	
-	model = monkeyTransform.modelMatrix();
-	model = glm::translate(model,glm::vec3(1.5f,1.5f,-1.5f));
-	model = glm::rotate(model, time, glm::vec3(0.0f, 1.0f, 0.0f));
-	model = glm::scale(model, glm::vec3(0.75f, 0.75f, 0.75f));
-	shader.setMat4("model", model);
-	monkeyModel.draw();
-
-	model = monkeyTransform.modelMatrix();
-	model = glm::translate(model,glm::vec3(-1.5f,1.5f,1.5f));
-	model = glm::rotate(model, time, glm::vec3(0.0f, 1.0f, 0.0f));
-	model = glm::scale(model, glm::vec3(0.75f, 0.75f, 0.75f));
-	shader.setMat4("model", model);
-	monkeyModel.draw();
-	
-	model = monkeyTransform.modelMatrix();
-	model = glm::translate(model,glm::vec3(-1.5f,1.5f,-1.5f));
-	model = glm::rotate(model, time, glm::vec3(0.0f, 1.0f, 0.0f));
-	model = glm::scale(model, glm::vec3(0.75f, 0.75f, 0.75f));
-	shader.setMat4("model", model);
 	monkeyModel.draw();
 }
 
-// I copied this function in from learnopengl.com to make testing easier
+// I copied this functin from learnopengl.com to make testing easier
 void renderCube()
 {
 	// initialize (if necessary)
@@ -500,4 +520,81 @@ void renderCube()
 	glBindVertexArray(cubeVAO);
 	glDrawArrays(GL_TRIANGLES, 0, 36);
 	glBindVertexArray(0);
+}
+
+
+float lerp(float a, float b, float t) {
+	return (1.0-t)*a + t*b;
+}
+
+glm::vec3 lerp(glm::vec3 a, glm::vec3 b, float t) {
+	glm::vec3 result = glm::vec3(0);
+	result.x = (1.0-t)*a.x + t*b.x;
+	result.y = (1.0-t)*a.y + t*b.y;
+	result.z = (1.0-t)*a.z + t*b.z;
+	return result;
+}
+
+// returns how far between a and b x is.
+float inverseLerp(float a, float b, float x) {
+	if (b == a) {
+		return 0;
+	}
+	return (x-a)/(b-a);
+}
+
+int getPreviousKeyframe(std::vector<Vec3Keyframe*> vector, float time) {
+	for (int i = 0; i < vector.size(); i++) {
+		if (vector[i]->time > time) {
+			return i-1;
+		}
+	}
+	return vector.size() - 1;
+}
+
+// current model position is determined by getting previous and next position keyframes from time
+// --if next position is index 0, count previous and next both as 0
+// --if previous is the final keyframe, count previous and next both as the final keyframe
+// and then doing an inverse lerp of previous and next keyframe times with current time to get value T
+// then do a lerp of previous position and next position with value T to get current position
+glm::vec3 getCurrentPosition(Animator* animator) {
+	std::vector<Vec3Keyframe*> keyFrames = animator->clip->positionFrames;
+	return getCurrentVec3FromKeyframes(animator, keyFrames);
+}
+
+glm::vec3 getCurrentRotation(Animator* animator) {
+	std::vector<Vec3Keyframe*> keyFrames = animator->clip->rotationFrames;
+	return getCurrentVec3FromKeyframes(animator, keyFrames);
+}
+
+glm::vec3 getCurrentScale(Animator* animator) {
+	std::vector<Vec3Keyframe*> keyFrames = animator->clip->scaleFrames;
+	return getCurrentVec3FromKeyframes(animator, keyFrames);
+}
+
+glm::vec3 getCurrentVec3FromKeyframes(Animator* animator, std::vector<Vec3Keyframe*> keyFrames) {
+	int previousKeyframeIndex = getPreviousKeyframe(keyFrames, animator->playbackTime);
+	int nextKeyframeIndex;
+	// if the previous index is -1, treat previous and next as 0
+	if (previousKeyframeIndex == -1) {
+		previousKeyframeIndex = 0;
+		nextKeyframeIndex = 0;
+	}
+	// if previous index is the end of the vector, treat previous and next as the same
+	else if (previousKeyframeIndex == keyFrames.size() - 1) {
+		nextKeyframeIndex = previousKeyframeIndex;
+	}
+	// otherwise next index is just the next sequential index
+	else {
+		nextKeyframeIndex = previousKeyframeIndex + 1;
+	}
+
+	float T = inverseLerp(keyFrames[previousKeyframeIndex]->time, keyFrames[nextKeyframeIndex]->time, animator->playbackTime);
+
+	glm::vec3 firstValue = glm::vec3(keyFrames[previousKeyframeIndex]->value[0], keyFrames[previousKeyframeIndex]->value[1], keyFrames[previousKeyframeIndex]->value[2]);
+	glm::vec3 secondValue = glm::vec3(keyFrames[nextKeyframeIndex]->value[0], keyFrames[nextKeyframeIndex]->value[1], keyFrames[nextKeyframeIndex]->value[2]);
+
+	glm::vec3 currentValue = lerp(firstValue, secondValue, T);
+
+	return currentValue;
 }
