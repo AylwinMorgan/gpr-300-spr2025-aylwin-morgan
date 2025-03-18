@@ -347,7 +347,9 @@ void drawUI() {
 			animator->clip->positionFrames.push_back(new Vec3Keyframe);
 		}
 		if (ImGui::Button("Remove Keyframe")) {
-			animator->clip->positionFrames.pop_back();
+			if (animator->clip->positionFrames.size() > 0){
+				animator->clip->positionFrames.pop_back();
+			}
 		}
 	}
 	//--manage rotation keyframes--
@@ -362,7 +364,9 @@ void drawUI() {
 			animator->clip->rotationFrames.push_back(new Vec3Keyframe);
 		}
 		if (ImGui::Button("Remove Keyframe")) {
-			animator->clip->rotationFrames.pop_back();
+			if (animator->clip->rotationFrames.size() > 0) {
+				animator->clip->rotationFrames.pop_back();
+			}
 		}
 	}
 	//--manage scale keyframes--
@@ -377,7 +381,9 @@ void drawUI() {
 			animator->clip->scaleFrames.push_back(new Vec3Keyframe(1.0f,1.0f,1.0f));
 		}
 		if (ImGui::Button("Remove Keyframe")) {
-			animator->clip->scaleFrames.pop_back();
+			if (animator->clip->scaleFrames.size() > 0) {
+				animator->clip->scaleFrames.pop_back();
+			}
 		}
 	}
 
