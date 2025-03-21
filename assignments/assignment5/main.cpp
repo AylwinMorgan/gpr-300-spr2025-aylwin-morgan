@@ -37,6 +37,8 @@ glm::vec3 getCurrentScale(Animator* animator);
 
 glm::vec3 getCurrentVec3FromKeyframes(Animator* animator, std::vector<Vec3Keyframe*> keyframes);
 
+void drawBezierCurve(BezierCurve* curve, int segmentCount);
+
 unsigned int cubeVAO = 0;
 unsigned int cubeVBO = 0;
 
@@ -59,7 +61,8 @@ AnimationClip* animationClip = new AnimationClip(1.0f);
 Animator* animator = new Animator(animationClip);
 
 // spline variables
-BezierCurve curve;
+BezierCurve* curve = new BezierCurve();
+
 
 float rectangleVertices[] = 
 {  // coords    //texCoords
@@ -83,6 +86,11 @@ float floorVertices[] = {
 	 25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,  25.0f, 25.0f
 };
 
+float lineVertices[] = {
+	-1.0f, -1.0f,
+	1.0f, 1.0f,
+};
+
 struct Material {
 	float Ka = 1.0;
 	float Kd = 0.5;
@@ -93,6 +101,9 @@ struct Material {
 ew::Camera camera;
 ew::Transform monkeyTransform;
 ew::CameraController cameraController;
+
+unsigned int curveVAO;
+unsigned int curveVBO;
 
 unsigned int planeVAO;
 unsigned int depthMap;
@@ -150,6 +161,19 @@ int main() {
 	glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,4*sizeof(float), (void*)(2*sizeof(float)));
 
 
+	// curve vertex objects
+	
+	glGenVertexArrays(1, &curveVAO);
+	glGenBuffers(1, &curveVBO);
+	glBindVertexArray(curveVAO);
+
+	glBindBuffer(GL_ARRAY_BUFFER, curveVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(lineVertices), &lineVertices, GL_STATIC_DRAW);
+	
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+	
+
 	ew::Shader shader = ew::Shader("assets/lit.vert", "assets/lit.frag");
 	ew::Shader emboss = ew::Shader("assets/emboss.vert","assets/emboss.frag");
 	//ew::Shader blur = ew::Shader("assets/blur.vert","assets/blur.frag");
@@ -189,10 +213,15 @@ int main() {
 	glReadBuffer(GL_NONE);
 	glBindFramebuffer(GL_FRAMEBUFFER,0);
 
+	glLineWidth(5.0f);
+	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	shadowMap.use();
 	shadowMap.setInt("diffuseTexture", 0);
 	shadowMap.setInt("shadowMap", 1);
+
+	curve->firstKnot->position = glm::vec3(0.0f, 0.0f, 0.0f);
+	curve->secondKnot->position = glm::vec3(4.0f, 4.0f, 4.0f);
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -202,10 +231,11 @@ int main() {
 		prevFrameTime = time;
 		cameraController.move(window, &camera, deltaTime);
 		
-		glEnable(GL_DEPTH_TEST);
-		glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		//glEnable(GL_DEPTH_TEST);
+		//glClearColor(0.5f, 0.1f, 0.2f, 1.0f);
+		//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+		/*
 		glm::vec3 lightPos(lightPosition[0], lightPosition[1], lightPosition[2]);
 		glm::mat4 lightProjection = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, nearPlane, farPlane);
 		glm::mat4 lightView = glm::lookAt(lightPos,
@@ -246,7 +276,7 @@ int main() {
 		}
 
 		simpleDepth.setMat4("model", model);
-		monkeyModel.draw();
+		//monkeyModel.draw();
 
 		//renderScene(simpleDepth, model, monkeyModel, time);
 
@@ -256,6 +286,9 @@ int main() {
 		glViewport(0, 0, screenWidth, screenHeight);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+		*/
+
+		/*
 		// render normal scene
 		shadowMap.use();
 		glm::mat4 projection = camera.projectionMatrix();
@@ -267,6 +300,7 @@ int main() {
 		shadowMap.setMat4("lightSpaceMatrix",lightSpaceMatrix);
 		shadowMap.setFloat("maxBias",maxBias);
 		shadowMap.setFloat("minBias",minBias);
+
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D,brickTexture);
 		glActiveTexture(GL_TEXTURE1);
@@ -275,17 +309,23 @@ int main() {
 
 
 		shadowMap.setMat4("model", model);
-		monkeyModel.draw();
+		//monkeyModel.draw();
 
-		drawBezierCurve(curve, 50);
 
 		//renderScene(shadowMap, model, monkeyModel, time);
 
-		drawUI();
+		*/
+		shader.use();
+		glBindVertexArray(curveVAO);
+		glDrawArrays(GL_LINES, 0, 2);
+		//drawBezierCurve(curve, 50);
+		//renderCube();
+		//drawUI();
 
 		glfwSwapBuffers(window);
 	}
 	delete animator;
+	delete curve;
 	printf("Shutting down...");
 }
 
@@ -395,11 +435,11 @@ void drawUI() {
 	if (ImGui::CollapsingHeader("Spline")) {
 		// toggle whether the spline is visible
 		float position[3];
-		position[0] = curve.firstKnot.position.x;
-		position[1] = curve.firstKnot.position.y;
-		position[2] = curve.firstKnot.position.z;
-		Imgui::SliderFloat3("Position", position, -5.0, 5.0);
-		curve.firstKnot.position = glm::vec3(position[0], position[1], position[2]);
+		position[0] = curve->firstKnot->position.x;
+		position[1] = curve->firstKnot->position.y;
+		position[2] = curve->firstKnot->position.z;
+		ImGui::SliderFloat3("Position", position, -5.0, 5.0);
+		curve->firstKnot->position = glm::vec3(position[0], position[1], position[2]);
 
 		// for each knot:
 		// set position
@@ -465,13 +505,18 @@ GLFWwindow* initWindow(const char* title, int width, int height) {
 	return window;
 }
 
-void drawBezierCurve(BezierCurve curve, int segmentCount) {
+void drawBezierCurve(BezierCurve* curve, int segmentCount) {
 	// for i in segment count
 	// draw line segment from point (i - 1) / segmentCount to i / segmentCount
-	float lineVertices[6];
+	if (curveVAO == 0) {
+		float vertices[] = {
+			0.0f, 0.0f, 0.0f,
+			1.0f, 1.0f, 1.0f
+		};
+	}
 	for (int i = 0; i < segmentCount; i++) {
-		glm::vec3 firstPoint = curve.getValueAtTime(i / segmentCount);
-		glm::vec3 secondPoint = curve.getValueAtTime((i + 1) / segmentCount);
+		glm::vec3 firstPoint = curve->getPointAtTime((float)i / segmentCount);
+		glm::vec3 secondPoint = curve->getPointAtTime((float)(i + 1) / segmentCount);
 
 		lineVertices[0] = firstPoint.x;
 		lineVertices[1] = firstPoint.y;
@@ -480,9 +525,9 @@ void drawBezierCurve(BezierCurve curve, int segmentCount) {
 		lineVertices[4] = secondPoint.y;
 		lineVertices[5] = secondPoint.z;
 
-		glVertexPointer(3, GL_FLOAT, 0, lineVertices);
-
+		glBindVertexArray(curveVAO);
 		glDrawArrays(GL_LINES, 0, 2);
+		glBindVertexArray(0);
 	}
 }
 
