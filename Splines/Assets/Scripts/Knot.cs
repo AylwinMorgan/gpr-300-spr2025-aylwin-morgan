@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class Knot : MonoBehaviour
 {
-    public float scale;
+    [SerializeField] public float scale;
     public GameObject controlPoint1;
     public GameObject controlPoint2;
 
@@ -40,6 +40,12 @@ public class Knot : MonoBehaviour
         Vector3 dir = transform.forward * scale;
         controlPoint1.transform.position = transform.position + dir;
         controlPoint2.transform.position = transform.position - dir;
+    }
+
+    private void OnDestroy()
+    {
+        Destroy(controlPoint1);
+        Destroy(controlPoint2);
     }
 
     public Vector3 GetNextControlPoint()
