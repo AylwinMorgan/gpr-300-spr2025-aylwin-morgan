@@ -17,8 +17,8 @@
 #include <ew/cameraController.h>
 #include <ew/texture.h>
 
-#include "../assignment5/assets/animation.h"
-#include "../assignment5/assets/spline.h"
+#include "../assignment6/assets/animation.h"
+#include "../assignment6/assets/joint.h"
 
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 GLFWwindow* initWindow(const char* title, int width, int height);
@@ -26,6 +26,9 @@ void drawUI();
 void renderScene(const ew::Shader &shader, const glm::mat4 monkeyMatrix, ew::Model monkeyModel, float time);
 
 void renderCube();
+
+void drawSkeleton(Joint* j, ew::Shader shader, ew::Model model);
+void SolveFK(Joint* j);
 
 float lerp(float a, float b, float t);
 glm::vec3 lerp(glm::vec3 a, glm::vec3 b, float t);
@@ -36,8 +39,6 @@ glm::vec3 getCurrentRotation(Animator* animator);
 glm::vec3 getCurrentScale(Animator* animator);
 
 glm::vec3 getCurrentVec3FromKeyframes(Animator* animator, std::vector<Vec3Keyframe*> keyframes);
-
-void drawBezierCurve(BezierCurve* curve, int segmentCount);
 
 unsigned int cubeVAO = 0;
 unsigned int cubeVBO = 0;
@@ -59,10 +60,6 @@ bool doGaussianBlur = false;
 
 AnimationClip* animationClip = new AnimationClip(1.0f);
 Animator* animator = new Animator(animationClip);
-
-// spline variables
-BezierCurve* curve = new BezierCurve();
-
 
 float rectangleVertices[] = 
 {  // coords    //texCoords
@@ -86,11 +83,6 @@ float floorVertices[] = {
 	 25.0f, -0.5f, -25.0f,  0.0f, 1.0f, 0.0f,  25.0f, 25.0f
 };
 
-float lineVertices[] = {
-	-1.0f, -1.0f,
-	1.0f, 1.0f,
-};
-
 struct Material {
 	float Ka = 1.0;
 	float Kd = 0.5;
@@ -102,17 +94,31 @@ ew::Camera camera;
 ew::Transform monkeyTransform;
 ew::CameraController cameraController;
 
-unsigned int curveVAO;
-unsigned int curveVBO;
-
 unsigned int planeVAO;
 unsigned int depthMap;
 float lightPosition[3] = {-2.0,4.0,-1.0};
 float nearPlane = 1.0f;
 float farPlane = 7.5f;
 
+// skeleton system for forward kinematics
+
+Joint* body = new Joint("Torso");
+Joint* head = body->addChild("Head");
+Joint* leftArm = body->addChild("Arm");
+Joint* leftWrist = leftArm->addChild("Wrist");
+Joint* leftHand = leftWrist->addChild("Hand");
+Joint* rightArm = body->addChild("Arm");
+Joint* rightWrist = rightArm->addChild("Wrist");
+Joint* rightHand = rightWrist->addChild("Hand");
+Joint* leftLeg = body->addChild("Leg");
+Joint* leftKnee = leftLeg->addChild("Knee");
+Joint* leftFoot = leftKnee->addChild("Foot");
+Joint* rightLeg = body->addChild("Leg");
+Joint* rightKnee = rightLeg->addChild("Knee");
+Joint* rightFoot = rightKnee->addChild("Foot");
+
 int main() {
-	GLFWwindow* window = initWindow("Assignment 5", screenWidth, screenHeight);
+	GLFWwindow* window = initWindow("Assignment 1", screenWidth, screenHeight);
 	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
 
 	GLuint brickTexture = ew::loadTexture("assets/brick_color.jpg");
@@ -161,19 +167,6 @@ int main() {
 	glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,4*sizeof(float), (void*)(2*sizeof(float)));
 
 
-	// curve vertex objects
-	
-	glGenVertexArrays(1, &curveVAO);
-	glGenBuffers(1, &curveVBO);
-	glBindVertexArray(curveVAO);
-
-	glBindBuffer(GL_ARRAY_BUFFER, curveVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(lineVertices), &lineVertices, GL_STATIC_DRAW);
-	
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-	
-
 	ew::Shader shader = ew::Shader("assets/lit.vert", "assets/lit.frag");
 	ew::Shader emboss = ew::Shader("assets/emboss.vert","assets/emboss.frag");
 	//ew::Shader blur = ew::Shader("assets/blur.vert","assets/blur.frag");
@@ -213,15 +206,10 @@ int main() {
 	glReadBuffer(GL_NONE);
 	glBindFramebuffer(GL_FRAMEBUFFER,0);
 
-	glLineWidth(5.0f);
-	//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
 	shadowMap.use();
 	shadowMap.setInt("diffuseTexture", 0);
 	shadowMap.setInt("shadowMap", 1);
-
-	curve->firstKnot->position = glm::vec3(0.0f, 0.0f, 0.0f);
-	curve->secondKnot->position = glm::vec3(4.0f, 4.0f, 4.0f);
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -231,11 +219,10 @@ int main() {
 		prevFrameTime = time;
 		cameraController.move(window, &camera, deltaTime);
 		
-		//glEnable(GL_DEPTH_TEST);
-		//glClearColor(0.5f, 0.1f, 0.2f, 1.0f);
-		//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glEnable(GL_DEPTH_TEST);
+		glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		/*
 		glm::vec3 lightPos(lightPosition[0], lightPosition[1], lightPosition[2]);
 		glm::mat4 lightProjection = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, nearPlane, farPlane);
 		glm::mat4 lightView = glm::lookAt(lightPos,
@@ -275,8 +262,9 @@ int main() {
 			}
 		}
 
-		simpleDepth.setMat4("model", model);
+		//simpleDepth.setMat4("model", model);
 		//monkeyModel.draw();
+		drawSkeleton(body, simpleDepth, monkeyModel);
 
 		//renderScene(simpleDepth, model, monkeyModel, time);
 
@@ -286,9 +274,6 @@ int main() {
 		glViewport(0, 0, screenWidth, screenHeight);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		*/
-
-		/*
 		// render normal scene
 		shadowMap.use();
 		glm::mat4 projection = camera.projectionMatrix();
@@ -300,7 +285,6 @@ int main() {
 		shadowMap.setMat4("lightSpaceMatrix",lightSpaceMatrix);
 		shadowMap.setFloat("maxBias",maxBias);
 		shadowMap.setFloat("minBias",minBias);
-
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D,brickTexture);
 		glActiveTexture(GL_TEXTURE1);
@@ -308,26 +292,29 @@ int main() {
 
 
 
-		shadowMap.setMat4("model", model);
+		//shadowMap.setMat4("model", model);
 		//monkeyModel.draw();
-
+		drawSkeleton(body, simpleDepth, monkeyModel);
 
 		//renderScene(shadowMap, model, monkeyModel, time);
 
-		*/
-		shader.use();
-		glBindVertexArray(curveVAO);
-		glDrawArrays(GL_LINES, 0, 2);
-		//drawBezierCurve(curve, 50);
-		//renderCube();
-		//drawUI();
+		drawUI();
 
 		glfwSwapBuffers(window);
 	}
 	delete animator;
-	delete curve;
 	printf("Shutting down...");
 }
+
+
+void drawSkeleton(Joint* j, ew::Shader shader, ew::Model model) {
+	shader.setMat4("model", j->getGlobalTransform());
+	model.draw();
+	for (Joint* child : j->children) {
+		drawSkeleton(child, shader, model);
+	}
+}
+
 
 void resetCamera(ew::Camera* camera, ew::CameraController* controller) {
 	camera->position = glm::vec3(0, 0, 5.0f);
@@ -367,6 +354,7 @@ void drawUI() {
 		// max bias 
 		ImGui::SliderFloat("Max Bias", &maxBias, 0.0f, 1.0f);
 	}
+
 	if (ImGui::CollapsingHeader("Animation")) {
 		// toggle whether the animation is playing
 		ImGui::Checkbox("Playing",&animator->isPlaying);
@@ -379,6 +367,7 @@ void drawUI() {
 		// animation duration
 		ImGui::SliderFloat("Duration", &animator->clip->duration, 0.01f, 10.0f);
 	}
+
 	// --manage position keyframes--
 	if (ImGui::CollapsingHeader("Position Keyframes")) {
 		for (int i = 0; i < animator->clip->positionFrames.size(); i++) {
@@ -429,22 +418,6 @@ void drawUI() {
 				animator->clip->scaleFrames.pop_back();
 			}
 		}
-	}
-
-	// spline info
-	if (ImGui::CollapsingHeader("Spline")) {
-		// toggle whether the spline is visible
-		float position[3];
-		position[0] = curve->firstKnot->position.x;
-		position[1] = curve->firstKnot->position.y;
-		position[2] = curve->firstKnot->position.z;
-		ImGui::SliderFloat3("Position", position, -5.0, 5.0);
-		curve->firstKnot->position = glm::vec3(position[0], position[1], position[2]);
-
-		// for each knot:
-		// set position
-		// set rotation
-		// set scale
 	}
 
 	ImGui::End();
@@ -505,32 +478,6 @@ GLFWwindow* initWindow(const char* title, int width, int height) {
 	return window;
 }
 
-void drawBezierCurve(BezierCurve* curve, int segmentCount) {
-	// for i in segment count
-	// draw line segment from point (i - 1) / segmentCount to i / segmentCount
-	if (curveVAO == 0) {
-		float vertices[] = {
-			0.0f, 0.0f, 0.0f,
-			1.0f, 1.0f, 1.0f
-		};
-	}
-	for (int i = 0; i < segmentCount; i++) {
-		glm::vec3 firstPoint = curve->getPointAtTime((float)i / segmentCount);
-		glm::vec3 secondPoint = curve->getPointAtTime((float)(i + 1) / segmentCount);
-
-		lineVertices[0] = firstPoint.x;
-		lineVertices[1] = firstPoint.y;
-		lineVertices[2] = firstPoint.z;
-		lineVertices[3] = secondPoint.x;
-		lineVertices[4] = secondPoint.y;
-		lineVertices[5] = secondPoint.z;
-
-		glBindVertexArray(curveVAO);
-		glDrawArrays(GL_LINES, 0, 2);
-		glBindVertexArray(0);
-	}
-}
-
 void renderScene(const ew::Shader& shader, glm::mat4 monkeyMatrix, ew::Model monkeyModel, float time) {
 	glm::mat4 model = glm::mat4(1.0f);
 	shader.setMat4("model", model);
@@ -542,7 +489,7 @@ void renderScene(const ew::Shader& shader, glm::mat4 monkeyMatrix, ew::Model mon
 	monkeyModel.draw();
 }
 
-// I copied this functin from learnopengl.com to make testing easier
+// I copied this function from learnopengl.com to make testing easier
 void renderCube()
 {
 	// initialize (if necessary)
@@ -691,3 +638,15 @@ glm::vec3 getCurrentVec3FromKeyframes(Animator* animator, std::vector<Vec3Keyfra
 	return currentValue;
 }
 
+
+void SolveFK(Joint* j) {
+	if (j->parent != nullptr) {
+		j->globalTransform = j->localTransform;
+	}
+	else {
+		j->globalTransform = j->parent->globalTransform * j->localTransform;
+	}
+	for (Joint* child : j->children) {
+		SolveFK(child);
+	}
+}
