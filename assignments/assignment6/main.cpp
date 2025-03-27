@@ -17,8 +17,8 @@
 #include <ew/cameraController.h>
 #include <ew/texture.h>
 
-#include "../assignment6/assets/animation.h"
-#include "../assignment6/assets/joint.h"
+#include "assets/animation.h"
+#include "assets/joint.h"
 
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 GLFWwindow* initWindow(const char* title, int width, int height);
@@ -101,7 +101,6 @@ float nearPlane = 1.0f;
 float farPlane = 7.5f;
 
 // skeleton system for forward kinematics
-
 Joint* body = new Joint("Torso");
 Joint* head = body->addChild("Head");
 Joint* leftArm = body->addChild("Arm");
@@ -118,7 +117,7 @@ Joint* rightKnee = rightLeg->addChild("Knee");
 Joint* rightFoot = rightKnee->addChild("Foot");
 
 int main() {
-	GLFWwindow* window = initWindow("Assignment 1", screenWidth, screenHeight);
+	GLFWwindow* window = initWindow("Assignment 6", screenWidth, screenHeight);
 	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
 
 	GLuint brickTexture = ew::loadTexture("assets/brick_color.jpg");
@@ -262,11 +261,8 @@ int main() {
 			}
 		}
 
-		//simpleDepth.setMat4("model", model);
-		//monkeyModel.draw();
-		drawSkeleton(body, simpleDepth, monkeyModel);
-
-		//renderScene(simpleDepth, model, monkeyModel, time);
+		renderScene(simpleDepth, monkeyTransform.modelMatrix(), monkeyModel, time);
+		//drawSkeleton(body, simpleDepth, monkeyModel);
 
 		glBindFramebuffer(GL_FRAMEBUFFER,0);
 
@@ -290,13 +286,9 @@ int main() {
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D,depthMap);
 
+		renderScene(shadowMap, monkeyTransform.modelMatrix(), monkeyModel, time);
 
-
-		//shadowMap.setMat4("model", model);
-		//monkeyModel.draw();
-		drawSkeleton(body, simpleDepth, monkeyModel);
-
-		//renderScene(shadowMap, model, monkeyModel, time);
+		//drawSkeleton(body, simpleDepth, monkeyModel);
 
 		drawUI();
 
@@ -308,7 +300,8 @@ int main() {
 
 
 void drawSkeleton(Joint* j, ew::Shader shader, ew::Model model) {
-	shader.setMat4("model", j->getGlobalTransform());
+	//shader.setMat4("model", j->getGlobalTransform());
+	shader.setMat4("model", monkeyTransform.modelMatrix());
 	model.draw();
 	for (Joint* child : j->children) {
 		drawSkeleton(child, shader, model);
@@ -637,7 +630,6 @@ glm::vec3 getCurrentVec3FromKeyframes(Animator* animator, std::vector<Vec3Keyfra
 
 	return currentValue;
 }
-
 
 void SolveFK(Joint* j) {
 	if (j->parent != nullptr) {

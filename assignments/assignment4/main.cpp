@@ -17,7 +17,7 @@
 #include <ew/cameraController.h>
 #include <ew/texture.h>
 
-#include "../assignment4/assets/animation.h"
+#include "assets/animation.h"
 
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 GLFWwindow* initWindow(const char* title, int width, int height);
