@@ -16,6 +16,9 @@ public:
 
 	Joint();
 	Joint(std::string partName);
+	Joint(std::string partName, glm::vec3 lPosition, glm::vec3 lRotation, glm::vec3 lScale);
+	~Joint();
 	Joint* addChild(std::string partName);
+	Joint* addChild(std::string partName, glm::vec3 lPosition, glm::vec3 lRotation, glm::vec3 lScale);
 	glm::mat4 getGlobalTransform();
 };

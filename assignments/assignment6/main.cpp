@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <math.h>
 
+#include <vector>
 #include <ew/external/glad.h>
 
 #include <GLFW/glfw3.h>
@@ -27,8 +28,27 @@ void renderScene(const ew::Shader &shader, const glm::mat4 monkeyMatrix, ew::Mod
 
 void renderCube();
 
-void drawSkeleton(Joint* j, ew::Shader shader, ew::Model model);
-void SolveFK(Joint* j);
+// Struct used for creating a tree of ImGui collapsing headers from the skeleton
+struct CollapsibleHeader {
+	std::string name;
+	std::vector<CollapsibleHeader*> subHeaders;
+	Joint* relevantJoint;
+	int id;
+	static int headerCount;
+	~CollapsibleHeader() {
+		for (CollapsibleHeader* child : subHeaders) {
+			delete child;
+		}
+	}
+};
+int CollapsibleHeader::headerCount = 0;
+
+CollapsibleHeader* baseFKHeader = new CollapsibleHeader;
+
+void drawHeaderTree(CollapsibleHeader* header);
+void setUpHeaderTreeForSkeleton(CollapsibleHeader* header, Joint* j);
+void addImGuiControlsToJoint(Joint* j);
+void drawSkeleton(Joint* j, const ew::Shader& shader, ew::Model model);
 
 float lerp(float a, float b, float t);
 glm::vec3 lerp(glm::vec3 a, glm::vec3 b, float t);
@@ -96,25 +116,25 @@ ew::CameraController cameraController;
 
 unsigned int planeVAO;
 unsigned int depthMap;
-float lightPosition[3] = {-2.0,4.0,-1.0};
+float lightPosition[3] = {-2.0,1.0,5.0};
 float nearPlane = 1.0f;
 float farPlane = 7.5f;
 
 // skeleton system for forward kinematics
 Joint* body = new Joint("Torso");
-Joint* head = body->addChild("Head");
-Joint* leftArm = body->addChild("Arm");
-Joint* leftWrist = leftArm->addChild("Wrist");
-Joint* leftHand = leftWrist->addChild("Hand");
-Joint* rightArm = body->addChild("Arm");
-Joint* rightWrist = rightArm->addChild("Wrist");
-Joint* rightHand = rightWrist->addChild("Hand");
-Joint* leftLeg = body->addChild("Leg");
-Joint* leftKnee = leftLeg->addChild("Knee");
-Joint* leftFoot = leftKnee->addChild("Foot");
-Joint* rightLeg = body->addChild("Leg");
-Joint* rightKnee = rightLeg->addChild("Knee");
-Joint* rightFoot = rightKnee->addChild("Foot");
+Joint* head = body->addChild("Head", glm::vec3(0,1.5,0), glm::vec3(0,0,0), glm::vec3(0.75,0.75,0.75));
+Joint* leftArm = body->addChild("Left Arm", glm::vec3(1.5, 0.4, 0), glm::vec3(0, -80, 0), glm::vec3(0.75, 0.75, 0.75));
+Joint* leftWrist = leftArm->addChild("Left Elbow", glm::vec3(1.2, -0.5, 0), glm::vec3(0, 0, 0), glm::vec3(0.75, 0.75, 0.75));
+Joint* leftHand = leftWrist->addChild("Left Hand", glm::vec3(1, -0.5, 0), glm::vec3(0, 0, 0), glm::vec3(0.5, 0.5, 0.5));
+Joint* rightArm = body->addChild("Right Arm", glm::vec3(-1.5, 0.4, 0), glm::vec3(0, 80, 0), glm::vec3(0.75, 0.75, 0.75));
+Joint* rightWrist = rightArm->addChild("Right Elbow", glm::vec3(-1.2, -0.5, 0), glm::vec3(0, 0, 0), glm::vec3(0.75, 0.75, 0.75));
+Joint* rightHand = rightWrist->addChild("Right Hand", glm::vec3(-1, -0.5, 0), glm::vec3(0, 0, 0), glm::vec3(0.5, 0.5, 0.5));
+Joint* leftLeg = body->addChild("Left Leg", glm::vec3(1,-1.4,0), glm::vec3(0,0,0), glm::vec3(0.8,0.8,0.8));
+Joint* leftKnee = leftLeg->addChild("Left Knee", glm::vec3(0, -1, 0), glm::vec3(0, 0, 0), glm::vec3(0.6, 0.6, 0.6));
+Joint* leftFoot = leftKnee->addChild("Left Foot", glm::vec3(0, -1, 1), glm::vec3(0, 0, 0), glm::vec3(0.5, 0.5, 0.5));
+Joint* rightLeg = body->addChild("Right Leg", glm::vec3(-1, -1.4, 0), glm::vec3(0, 0, 0), glm::vec3(0.8, 0.8, 0.8));
+Joint* rightKnee = rightLeg->addChild("Right Knee", glm::vec3(0, -1, 0), glm::vec3(0, 0, 0), glm::vec3(0.6, 0.6, 0.6));
+Joint* rightFoot = rightKnee->addChild("Right Foot", glm::vec3(0, -1, 1), glm::vec3(0, 0, 0), glm::vec3(0.5, 0.5, 0.5));
 
 int main() {
 	GLFWwindow* window = initWindow("Assignment 6", screenWidth, screenHeight);
@@ -122,11 +142,14 @@ int main() {
 
 	GLuint brickTexture = ew::loadTexture("assets/brick_color.jpg");
 
+	GLuint chipTexture = ew::loadTexture("assets/chip_color.jpg");
+
 	camera.position = glm::vec3(0.0f, 0.0f, 5.0f);
 	camera.target = glm::vec3(0.0f, 0.0f, 0.0f); // point camera at the center of the scene
 	camera.aspectRatio = (float)screenWidth / screenHeight;
 	camera.fov = 60.0f; // vertical field of view in degrees
 
+	setUpHeaderTreeForSkeleton(baseFKHeader, body);
 
     float planeVertices[] = {
         // positions            // normals         // texcoords
@@ -219,7 +242,7 @@ int main() {
 		cameraController.move(window, &camera, deltaTime);
 		
 		glEnable(GL_DEPTH_TEST);
-		glClearColor(0.1f, 0.1f, 0.2f, 1.0f);
+		glClearColor(0.4f, 0.7f, 0.4f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		glm::vec3 lightPos(lightPosition[0], lightPosition[1], lightPosition[2]);
@@ -235,7 +258,7 @@ int main() {
 		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
     	glClear(GL_DEPTH_BUFFER_BIT);
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, brickTexture);
+		glBindTexture(GL_TEXTURE_2D, chipTexture);
 
 		glm::mat4 model = monkeyTransform.modelMatrix();
 
@@ -253,16 +276,12 @@ int main() {
 				model = glm::rotate(model, getCurrentRotation(animator)[2], glm::vec3(0.0f, 0.0f, 1.0f));
 			}
 			if (animator->clip->scaleFrames.size() > 0){
-				//model = glm::scale(model, getCurrentScale(animator));
 				glm::vec3 scale = getCurrentScale(animator);
-				//model = glm::scale(model,glm::vec3(2.0f,1.0f,1.0f));
-				//glm::vec4 scalar = glm::vec4(getCurrentScale(animator),1.0f);
 				model = glm::scale(model, scale);
 			}
 		}
 
-		renderScene(simpleDepth, monkeyTransform.modelMatrix(), monkeyModel, time);
-		//drawSkeleton(body, simpleDepth, monkeyModel);
+		drawSkeleton(body, simpleDepth, monkeyModel);
 
 		glBindFramebuffer(GL_FRAMEBUFFER,0);
 
@@ -282,13 +301,13 @@ int main() {
 		shadowMap.setFloat("maxBias",maxBias);
 		shadowMap.setFloat("minBias",minBias);
 		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D,brickTexture);
+		glBindTexture(GL_TEXTURE_2D,chipTexture);
 		glActiveTexture(GL_TEXTURE1);
 		glBindTexture(GL_TEXTURE_2D,depthMap);
 
-		renderScene(shadowMap, monkeyTransform.modelMatrix(), monkeyModel, time);
+		//renderScene(shadowMap, monkeyTransform.modelMatrix(), monkeyModel, time);
 
-		//drawSkeleton(body, simpleDepth, monkeyModel);
+		drawSkeleton(body, shadowMap, monkeyModel);
 
 		drawUI();
 
@@ -299,15 +318,26 @@ int main() {
 }
 
 
-void drawSkeleton(Joint* j, ew::Shader shader, ew::Model model) {
-	//shader.setMat4("model", j->getGlobalTransform());
-	shader.setMat4("model", monkeyTransform.modelMatrix());
+void drawSkeleton(Joint* j, const ew::Shader& shader, ew::Model model) {
+	//glm::mat4 modelMatrix = monkeyTransform.modelMatrix();
+	glm::mat4 modelMatrix = j->getGlobalTransform();
+	shader.setMat4("model", modelMatrix);
 	model.draw();
 	for (Joint* child : j->children) {
 		drawSkeleton(child, shader, model);
 	}
 }
 
+void renderScene(const ew::Shader& shader,const glm::mat4 monkeyMatrix, ew::Model monkeyModel, float time) {
+	glm::mat4 model = glm::mat4(1.0f);
+	shader.setMat4("model", model);
+	glBindVertexArray(planeVAO);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+
+	shader.setMat4("model", monkeyMatrix);
+
+	monkeyModel.draw();
+}
 
 void resetCamera(ew::Camera* camera, ew::CameraController* controller) {
 	camera->position = glm::vec3(0, 0, 5.0f);
@@ -320,7 +350,7 @@ void drawUI() {
 	ImGui_ImplGlfw_NewFrame();
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui::NewFrame();
-
+	/*
 	ImGui::Begin("Settings");
 	if (ImGui::Button("Reset Camera")) {
 		resetCamera(&camera, &cameraController);
@@ -424,6 +454,12 @@ void drawUI() {
 	ImGui::Image((ImTextureID)depthMap, windowSize, ImVec2(0, 1), ImVec2(1, 0));
 	ImGui::EndChild();
 	ImGui::End();
+	*/
+	ImGui::Begin("Forward Kinematics Controls");
+
+	drawHeaderTree(baseFKHeader);
+
+	ImGui::End();
 
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -434,6 +470,33 @@ void framebufferSizeCallback(GLFWwindow* window, int width, int height)
 	glViewport(0, 0, width, height);
 	screenWidth = width;
 	screenHeight = height;
+}
+
+void setUpHeaderTreeForSkeleton(CollapsibleHeader* header, Joint* j) {
+	header->name = j->name;
+	header->relevantJoint = j;
+	header->id = CollapsibleHeader::headerCount;
+	for (int i = 0; i < j->children.size(); i++) {
+		CollapsibleHeader* newHeader = new CollapsibleHeader;
+		CollapsibleHeader::headerCount++;
+		header->subHeaders.push_back(newHeader);
+		setUpHeaderTreeForSkeleton(header->subHeaders[i], j->children[i]);
+	}
+}
+
+void drawHeaderTree(CollapsibleHeader* header) {
+	if (ImGui::CollapsingHeader(header->name.c_str())) {
+		ImGui::PushID(header->id);
+		ImGui::Indent(20);
+		ImGui::SliderFloat3("Position", glm::value_ptr(header->relevantJoint->localPosition),-10.0f,10.0f);
+		ImGui::SliderFloat3("Rotation", glm::value_ptr(header->relevantJoint->localRotation), -360.0f,360.0f);
+		ImGui::SliderFloat3("Scale", glm::value_ptr(header->relevantJoint->localScale),0.001f,20.0f);
+		ImGui::PopID();
+		for (CollapsibleHeader* child : header->subHeaders) {
+			drawHeaderTree(child);
+		}
+		ImGui::Unindent(20);
+	}
 }
 
 /// <summary>
@@ -471,16 +534,6 @@ GLFWwindow* initWindow(const char* title, int width, int height) {
 	return window;
 }
 
-void renderScene(const ew::Shader& shader, glm::mat4 monkeyMatrix, ew::Model monkeyModel, float time) {
-	glm::mat4 model = glm::mat4(1.0f);
-	shader.setMat4("model", model);
-	glBindVertexArray(planeVAO);
-	glDrawArrays(GL_TRIANGLES,0,6);
-	
-	shader.setMat4("model", monkeyMatrix);
-	
-	monkeyModel.draw();
-}
 
 // I copied this function from learnopengl.com to make testing easier
 void renderCube()
